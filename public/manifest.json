@@ -1,0 +1,23 @@
+{
+  "name": "Paula Campos – Link na Bio",
+  "short_name": "Paula Campos",
+  "description": "Consultora Imobiliária de Alto Padrão. WhatsApp, site oficial e redes sociais.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#061426",
+  "theme_color": "#D7B574",
+  "icons": [
+    {
+      "src": "assets/images/perfil3.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/images/perfil3.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
