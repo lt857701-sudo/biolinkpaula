@@ -1,0 +1,79 @@
+name: Validate skill package
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned FFmpeg toolchain
+        uses: FedericoCarboni/setup-ffmpeg@36c6454b5a2348e7794ba2d82a21506605921e3d
+        with:
+          ffmpeg-version: release
+      - name: Validate package structure and references
+        run: node skills/ai-ui-ux-motion-engine/scripts/validate-package.mjs
+      - name: Validate cinematic brief and prompt generation
+        run: |
+          node skills/ai-ui-ux-motion-engine/scripts/validate-cinematic-brief.mjs \
+            skills/ai-ui-ux-motion-engine/assets/cinematic-brief.example.json
+          node skills/ai-ui-ux-motion-engine/scripts/render-cinematic-prompt.mjs \
+            skills/ai-ui-ux-motion-engine/assets/cinematic-brief.example.json \
+            --mode flagship > /tmp/cinematic-prompt.txt
+          grep -q "IDENTITY LOCK" /tmp/cinematic-prompt.txt
+          grep -q "INTENT CONTRACT" /tmp/cinematic-prompt.txt
+          grep -q "SHOT 4" /tmp/cinematic-prompt.txt
+          node skills/ai-ui-ux-motion-engine/scripts/test-cinematic-regressions.mjs
+          node skills/ai-ui-ux-motion-engine/scripts/validate-creative-acceptance.mjs \
+            skills/ai-ui-ux-motion-engine/assets/creative-acceptance.example.json \
+            --stage integration
+          node --check skills/ai-ui-ux-motion-engine/scripts/higgsfield-preflight.mjs
+      - name: Validate cinematic media preparation script
+        run: |
+          bash -n skills/ai-ui-ux-motion-engine/scripts/prepare-scroll-media.sh
+          bash skills/ai-ui-ux-motion-engine/scripts/prepare-scroll-media.sh --help \
+            | grep -q "silent all-intra H.264"
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i "testsrc2=size=320x180:rate=12:duration=1" \
+            -c:v libx264 -pix_fmt yuv420p /tmp/scroll-source.mp4
+          bash skills/ai-ui-ux-motion-engine/scripts/prepare-scroll-media.sh \
+            /tmp/scroll-source.mp4 /tmp/scroll-media --frames 12 --width 320
+          node skills/ai-ui-ux-motion-engine/scripts/validate-scroll-media.mjs \
+            /tmp/scroll-media/scroll-master.mp4 \
+            --poster /tmp/scroll-media/poster.jpg \
+            --json /tmp/scroll-media/revalidated.json
+          ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i "color=c=red:size=320x180" -frames:v 1 \
+            /tmp/scroll-media/wrong-poster.jpg
+          if node skills/ai-ui-ux-motion-engine/scripts/validate-scroll-media.mjs \
+            /tmp/scroll-media/scroll-master.mp4 \
+            --poster /tmp/scroll-media/wrong-poster.jpg; then
+            echo "Mismatched poster unexpectedly passed" >&2
+            exit 1
+          fi
+          test -s /tmp/scroll-media/delivery-validation.json
+          test -s /tmp/scroll-media/revalidated.json
+      - name: Run motion-safety self-audit
+        run: node skills/ai-ui-ux-motion-engine/scripts/audit-motion-safety.mjs .
+      - name: Exercise every portable installer target
+        run: |
+          test_root="$(mktemp -d)"
+          targets="codex claude cursor antigravity antigravity-cli gemini copilot vscode cline roo opencode windsurf amp zed goose agents"
+          for target in $targets; do
+            destination="$test_root/$target"
+            ./scripts/install-skill.sh \
+              --target "$target" \
+              --scope project \
+              --destination "$destination"
+            test -f "$destination/ai-ui-ux-motion-engine/SKILL.md"
+          done
